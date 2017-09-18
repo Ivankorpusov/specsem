@@ -1,0 +1,790 @@
+<!DOCTYPE HTML> 
+<head>
+  <meta charset="utf-8">
+  <title>2-3 tree insert key</title>
+	<link rel="stylesheet" href="style.css">
+</head>
+<body>  
+<script>
+var canva; 
+var context;
+var NODE_SIZE=18; 
+var FILL="#36BBCE"; //цвет узла
+var TEXT="#000"; //цвет текста
+var STROKE="#000"; //цвет обводки
+var ACCENT="#f00"; //цвет выделения узла 
+var leafCount=0; // это счетчик листьев дерева, нужен чтоб задать координаты листьям в arrange
+var DISTANSE_X=30; //минимальное расстояние между узлами
+var DISTANSE_Y=30;
+var STEP_TIME=800; //время между концом предыдущего шага и началом следующего
+var pieces=30; //число кадров на которое делится анимация 
+var tree=null; //2-3 дерево которое отображается собственно
+var state=-1; //состояние : -1 запущенна анимация, 0 пауза, 1 выполняет один шаг
+var PAUSE_TIME=30; //интервал проверки не стоит ли функция на паузе
+var FRAME_TIME=20; //время между кадрами (перерисовской)
+
+window.onload = function () { //эт при загрузке страницы выполняется, тут находим canvas на странице и задаем контекст
+	/*document.getElementById("step").removeAttribute("disabled");
+	}else{
+	document.getElementById("result").setAttribute("disabled","disabled");*/
+	  
+	   canva = document.getElementById("canva");
+	   context = canva.getContext("2d"); 
+	   context.lineWidth=2;
+	   context.fillStyle=FILL;
+	   context.font="12px arial";
+	   context.textAlign="center";
+	   context.textBaseline = "middle";
+	  document.getElementById("start").setAttribute("disabled","disabled");
+	  document.getElementById("pause").setAttribute("disabled","disabled");
+	  document.getElementById("next").setAttribute("disabled","disabled");
+	  //document.getElementById("fin").setAttribute("disabled","disabled");
+	   
+	   
+}
+
+function clean(){//очищает canvas
+	context.clearRect(0,0,canva.width,canva.height);
+}
+
+function compareByKey(node1,node2){ //сравнивает узлы по ключу
+	if(node1.keys[0]<node2.keys[0]){
+		return -1;
+	}else if(node1.keys[0]>node2.keys[0]){
+		return 1;
+	}else{return 0;}
+}
+
+//"классы"	обьектов
+function Tree(r){
+	this.root= r || null;
+	this.height=0;
+	this.leafs=0;
+	
+	
+	this.drawOld = function(){
+		clean();
+		this.root.drawTreeOld();
+	}
+	this.saveP = function(){
+		this.root.savePos();
+	}
+	this.draw = function(){
+		clean();
+		this.root.drawTree();
+	}
+	this.arrange= function(){
+		leafCount=0;
+		this.root.arrange();
+	}
+	this.search = function(x){
+		var t = this.root;
+		while(t.sons.length!=0){
+			if(x<t.keys[0]){
+					t=t.sons[0];
+			}else if(t.keys.length==1){
+				t=t.sons[1];
+			}else{
+				if(x<t.keys[1]){
+					t=t.sons[1];
+				}else{
+					t=t.sons[2];
+				}
+			}
+		}
+		
+		return t;
+	}
+	this.insert = function(x){
+		if (this.root==null){ //empty tree
+			this.root= new Node([x]);
+		}else{
+			var place = this.search(x);
+			if (place.keys.length==1){
+				if(x<place.keys[0]){
+					place.keys.unshift(x);
+				}else{
+					place.keys.push(x);
+				}
+				return;
+			}else{
+				if(x<place.keys[0]){
+					place.keys.unshift(x);
+				}else if(x<place.keys[1]){
+					place.keys[2]=place.keys[1];
+					place.keys[1]=x;
+				}else{
+					place.keys.push(x);
+				}
+				split(place,this);
+			}
+			
+		}
+	}
+
+}
+
+
+function Node(ks,p,ss){
+	this.parent=p||null;//ссылка на родительчкий узел
+	this.keys=ks||[];//ключи
+	this.sons=ss||[]; //дочерние узлы
+	this.width=ks.length*NODE_SIZE; //ширина
+	this.posX=0;//кординаты на канве
+	this.posY=0;
+	this.stroke=STROKE;//цвет обводки
+	this.oldPosX=0; //"сохраненные" координаты , нужны для анимации
+	this.oldPosY=0;
+	this.dx=0; //скорость движения
+	this.dy=0;
+	this.move= function(){ //рисует 1 кадр движения узла и его поддерева с сохраненных координат на текущие, возвращает false пока узел или какой либо узел в его поддереве не достиг цели
+	
+		var flag=true;
+		var a=true;
+		if(!areClose(this)){ 
+			this.oldPosX+=this.dx;
+			this.oldPosY+=this.dy;
+			flag=false;
+		}
+		for(var i=0;i<this.sons.length;i++){
+			a=this.sons[i].move();
+			flag=a&&flag;
+		}
+		return flag;
+	}
+	this.setSp = function(){ //установка скорости узла и всего его поддерева
+		this.dx=(this.posX-this.oldPosX)/pieces;
+		this.dy=(this.posY-this.oldPosY)/pieces;
+		for(var i=0;i<this.sons.length;i++){
+			this.sons[i].setSp();
+		}
+	}
+	this.savePos= function(){ //сохраняет текущие координаты в узле
+		this.oldPosX=this.posX;
+		this.oldPosY=this.posY;
+		for(var i=0;i<this.sons.length;i++){
+			this.sons[i].savePos();
+		}
+	}
+	this.drawTree = function(){ //рисует поддерево узла
+		context.beginPath();
+		for(var i =0; i<this.sons.length;i++){
+				//this.sons[i].lineColor=LINE_COLOR;	
+				context.moveTo(this.posX,this.posY);
+				context.lineTo(this.sons[i].posX,this.sons[i].posY);
+				context.stroke();
+				this.sons[i].drawTree();
+		}
+		this.draw();		
+	}
+	this.draw=function(){//рисует сам узел
+		
+		pX=this.posX;
+		pY=this.posY-NODE_SIZE*0.5;
+	
+		context.strokeStyle=this.stroke;
+		var px = this.posX-this.width/2;
+		var py = pY;
+		
+		context.fillRect(px,py,this.width,NODE_SIZE);
+		context.strokeRect(px,py,this.width,NODE_SIZE);
+		context.fillStyle = TEXT;
+		
+		if(this.keys.length==2){
+			context.fillText(this.keys[0],px+NODE_SIZE*0.5, this.posY);
+			context.fillText(this.keys[1],px-NODE_SIZE*0.5+this.width, this.posY);
+		}else if(this.keys.length==1){
+			context.fillText(this.keys[0],this.posX, this.posY);
+		}else{
+			context.fillText(this.keys[0],px+NODE_SIZE*0.5, this.posY);
+			context.fillText(this.keys[1],this.posX, this.posY);
+			context.fillText(this.keys[2],px-NODE_SIZE*0.5+this.width, this.posY);
+		}	
+		context.fillStyle=FILL;
+		context.strokeStyle=STROKE;
+	}
+	//old draw , разница только в координатах
+	this.drawTreeOld = function(){ //рисует сохраненное поддерово
+		context.beginPath();
+		for(var i =0; i<this.sons.length;i++){
+				//this.sons[i].lineColor=LINE_COLOR;	
+				context.moveTo(this.oldPosX,this.oldPosY);
+				context.lineTo(this.sons[i].oldPosX,this.sons[i].oldPosY);
+				context.stroke();
+				this.sons[i].drawTreeOld();
+		}
+		this.drawOld();		
+	}
+	this.drawOld=function(){ //рисует сохраненный узел
+		
+		pX=this.oldPosX;
+		pY=this.oldPosY-NODE_SIZE*0.5;
+		
+		context.strokeStyle=this.stroke;
+		var px = this.oldPosX-this.width/2;
+		var py = pY;
+		
+		context.fillRect(px,py,this.width,NODE_SIZE);
+		context.strokeRect(px,py,this.width,NODE_SIZE);
+		context.fillStyle = TEXT;
+		if(this.keys.length==2){
+			context.fillText(this.keys[0],px+NODE_SIZE*0.5, this.oldPosY);
+			context.fillText(this.keys[1],px-NODE_SIZE*0.5+this.width, this.oldPosY);
+		}else if(this.keys.length==1){
+			context.fillText(this.keys[0],this.oldPosX, this.oldPosY);
+		}else{
+			context.fillText(this.keys[0],px+NODE_SIZE*0.5, this.oldPosY);
+			context.fillText(this.keys[1],this.oldPosX, this.oldPosY);
+			context.fillText(this.keys[2],px-NODE_SIZE*0.5+this.width, this.oldPosY);
+		}	
+		context.fillStyle=FILL;
+		context.strokeStyle=STROKE;
+	}//
+	this.addSon = function(node,pos){//добавляет дочерний узел
+		for(var i=this.sons.length-1;i>=pos;i--){
+			this.sons[i+1]=this.sons[i];
+		}
+		this.sons[pos]=node;
+	}
+	this.arrange=function(){ //задаем координаты
+		
+		this.width=this.keys.length*NODE_SIZE;
+		if(this.sons.length==0){//leaf
+			this.posX=(leafCount+1)*(NODE_SIZE + DISTANSE_X);
+			this.posY=canva.height - DISTANSE_Y- NODE_SIZE;
+			leafCount++;
+		}else if(this.sons.length==2){ //single
+			this.sons[0].arrange();
+			this.sons[1].arrange();
+			this.posX=(this.sons[0].posX+this.sons[1].posX)/2;
+			this.posY=this.sons[0].posY - DISTANSE_Y - NODE_SIZE;
+		} else if(this.sons.length==3){ //double
+			this.sons[0].arrange();
+			this.sons[1].arrange();
+			this.sons[2].arrange();
+			this.posX=this.sons[1].posX;
+			this.posY=this.sons[0].posY - DISTANSE_Y - NODE_SIZE;
+		} else{ //overflow
+			this.sons[0].arrange();
+			this.sons[1].arrange();
+			this.sons[2].arrange();
+			this.sons[3].arrange();
+			this.posX=(this.sons[0].posX+this.sons[2].posX)/2;
+			this.posY=this.sons[0].posY - DISTANSE_Y - NODE_SIZE;
+		}
+	}
+	this.addKey = function(k,pos){ //вставляет ключ на нужное место
+		width+=NODE_SIZE;
+		this.keys.splice(pos,0,k);
+	}
+	this.delKey = function (pos){ //удаляет ключ
+		width-=NODE_SIZE;
+		this.keys.splice(pos,1);
+	}
+}
+//
+
+function moveAll(n){ 
+		tree.root.setSp();
+		m(false);
+		
+	function m(flag){ //рисует 1 кадр 
+		if(state==0){//пауза
+			setTimeout(m,0,flag);
+		}else if(state==-1){//анимация
+			if(!flag){ //анимация не закончена
+				flag = tree.root.move(); 
+				tree.drawOld();
+				setTimeout(m,FRAME_TIME,flag);
+			}else{
+				clean();
+				tree.draw();
+				if(n.parent==null){ //если мы разделяли корень
+				finish();
+				}else{
+					showSplit(n.parent); //идем вверх и если нужно снова разделяем
+				}
+			}
+		}else{//шаг без анимации
+			state--;
+			clean();
+			tree.draw();
+			if(n.parent==null){
+				finish();
+			}else{
+				showSplit(n.parent);
+			}
+			
+		}
+}
+	}
+
+
+function split(node,tr){ //ничего не рисует, нужно для постоения дерева
+	if(node.keys.length>2){
+		var p=node.parent;
+		var k2= node.keys[2];
+		var a =new Node([k2]);
+		var k1=node.keys[1];
+		var k0 = node.keys[0];
+		if(node.sons.length!=0){ //not leaf
+			a.sons=node.sons.slice(2);
+			node.sons.length=2;
+			a.sons[0].parent=a;
+			a.sons[1].parent=a;
+			
+		}
+			if(p==null){//root
+				tr.root=new Node([k1],null,[node,a]);
+				node.keys.length=1;
+				node.parent=tr.root;
+				a.parent=tr.root;
+			}else{
+				a.parent=p;
+				for(var i=0; i<p.keys.length;i++){//всатвляем средний ключ куда надо
+					if (p.keys[i]>k1){
+						p.keys.splice(i,0,k1);
+						node.keys.length=1;
+						p.sons.splice(i+1,0,a);
+						break;
+					}
+				}
+				if(node.keys.length>1){
+					p.keys.push(k1);
+					p.sons.push(a);
+					node.keys.length=1;
+				}
+				split(p,tr); //делаем то же самое для родительского узла
+			}
+	}
+}
+
+//порядок анимации:
+//showSearch -> showAdd -> showSplit(n раз) -> finish
+
+function showSerch(x){ // ищем места куда нужно вставить новый ключ
+	if(state==0){ //пауза
+		setTimeout(showSearch,PAUSE_TIME,x);
+	}else if(state==-1){ //анимация
+		clean();
+		tree.arrange();
+		tree.draw();
+		accentNode(tree.root);
+	}else{//шаг
+		state--;
+		clean();
+		tree.arrange();
+		tree.draw();
+		accentNode(tree.root);
+	}
+	function accentNode(n){ //выделяет красным текущий узел
+		
+		if(state==0){//пауза
+			setTimeout(accentNode,PAUSE_TIME,n);
+		}else { //анимация или шаг
+			if(n.parent!=null){//красим родительский узел в нормальный цвет
+			n.parent.draw();
+		}
+			if(state==1){
+				state--; //ставим паузу если нужно было сделать 1 шаг
+			}
+			//выделяем узел красным
+			n.stroke=ACCENT;
+			n.draw();
+			n.stroke=STROKE;
+			//
+			//спускаемся вниз по дереву
+			if (n.sons.length>0){//не лист
+				if(x<n.keys[0]){
+					s=n.sons[0];
+				}else if(n.keys.length==1){
+					s=n.sons[1];
+				}else if(x<n.keys[1]){
+					s=n.sons[1];
+				}else{
+					s=n.sons[2];
+				}
+				if(state==-1){
+				setTimeout(accentNode,STEP_TIME,s);
+				}else{
+					accentNode(s);
+				}
+			}else{//доходим до листа, переходим к вставке
+				if(state=-1){
+				setTimeout(showAdd,STEP_TIME,x,n);
+				}else{
+					showAdd(x,n);
+				}
+			}
+		}
+	}
+	
+}
+
+function showAdd(x,n){ //вставляем новый ключ в лист (возможно переполнение)
+	var a = new Node([x]);
+	//выясняем куда вставить ключ, и как это анимировать
+	if (n.keys.length==2){
+		if (x<n.keys[0]){
+			moveR(n.posX+NODE_SIZE/2);
+			
+		}else if(x<n.keys[1]){
+			stretch();
+		}else{
+			moveL(n.posX-NODE_SIZE/2);
+		}
+	}else{
+		if(x<n.keys[0]){
+			moveR(n.posX+NODE_SIZE/2);
+		}else{
+			moveL(n.posX-NODE_SIZE/2);
+		}
+	}
+	
+	
+	function moveR(px){ //старые ключи сьезжают вправо, новый появляется слева
+		if(state=-1){
+			if(n.posX<px){
+				clean();
+				tree.draw();
+				n.posX+=1;
+				setTimeout(moveR,FRAME_TIME,px);
+			}else{
+				/*a.posX=n.posX-NODE_SIZE/2-n.width/2;
+				a.posY=n.posY;
+				a.draw();*/
+				n.keys.splice(0,0,x);
+				finaly();
+			}
+		}else if(state==0){
+			setTimeout(moveR,PAUSE_TIME,px);
+		}else{
+			n.keys.splice(0,0,x);	
+			finaly();
+		}
+	}
+	function moveL(px){ //старые ключи сьезжают влева нвый появляется справа
+		if(state==-1){
+			if(n.posX>px){
+				clean();
+				tree.draw();
+				n.posX-=1;
+				setTimeout(moveL,FRAME_TIME,px);
+			}else{
+				/*a.posX=n.posX+n.width/2+NODE_SIZE/2;
+				a.posY=n.posY;
+				a.draw();*/
+				n.keys.push(x);
+				finaly();
+			}
+		}else if(state==0){
+			setTimeout(moveL,PAUSE_TIME,px);
+		}else{
+			n.keys.push(x);
+			finaly();
+		}
+	}
+	function stretch(){ //узел растягивается, новый ключ посередине
+		if(state==-1){
+			if(n.width<NODE_SIZE*3){
+			clean();
+			tree.draw();
+			n.width+=1;
+			setTimeout(stretch,FRAME_TIME);
+			}else{
+				/*a.posX=n.posX;
+				a.posY=n.posY;
+				a.draw();*/
+				n.keys.splice(1,0,x);
+				finaly();
+			}
+		}else if(state==0){
+			setTimeout(stretch,PAUSE_TIME);
+		}else{
+			n.keys.splice(1,0,x);
+				finaly();
+		}
+	}
+	function finaly(){//еще раз рисуем дерево и переходим к следующему шагу
+		if(state==0){
+			setTimeout(finaly,PAUSE_TIME);
+		}else{
+			
+			tree.arrange();
+			clean();
+			tree.draw();
+			if(state==1){
+				state--;
+				showSplit(n);
+			}else{
+			setTimeout(showSplit,STEP_TIME,n);
+			}
+		}
+		
+	}
+	
+	
+}
+
+function showSplit(n){ //если вставка ключа вызвала переполнение разделяем узел на 2, а у родительского узла становится на один ключ больше
+	if(state!=0){
+		
+		if(n.keys.length>2){
+			var mid = new Node([n.keys[1]]);
+			var r = new Node([n.keys[2]]);
+			var p = n.parent;
+			if(n.sons.length!=0){//not leaf
+				r.sons[0]=n.sons[2];
+				r.sons[1]=n.sons[3];
+				n.sons.length=2;
+				r.sons[0].parent=r;
+				r.sons[1].parent=r;
+			} 
+			if(p==null){//root
+				n.parent=mid;
+				n.keys.length=1;//set positions
+				n.width=NODE_SIZE;
+				mid.posX=n.posX;
+				mid.posY=n.posY;
+				n.posX-=NODE_SIZE;
+				r.posX=mid.posX+NODE_SIZE;
+				r.posY=n.posY;
+				r.parent=mid;
+				mid.sons[0]=n;
+				mid.sons[1]=r;
+				tree.root=mid;
+				
+				clean();
+				tree.draw();
+				r.draw();
+				mid.draw();
+				p=new Node(mid.keys[0]);
+				p.posX=mid.posX;
+				p.posY=mid.posY- DISTANSE_Y - NODE_SIZE;
+				var dx=(p.posX-mid.posX)/pieces;
+				var dy=(p.posY-mid.posY)/pieces;
+				if(state==1){
+					state--;
+					newRoot();
+				}else{
+				setTimeout(newRoot,STEP_TIME);
+				}
+			}else{
+				n.keys.length=1;//set positions
+				n.width=NODE_SIZE;
+				mid.posX=n.posX;
+				mid.posY=n.posY;
+				n.posX-=NODE_SIZE;
+				r.posX=mid.posX+NODE_SIZE;
+				r.posY=n.posY;
+				r.parent=p;
+				var flag=false;
+				var k=p.sons.indexOf(n);
+				p.sons.splice(k+1,0,r);
+				clean();
+				tree.draw();
+				r.draw();
+				mid.draw();
+				var dx=(p.posX-mid.posX)/pieces;
+				var dy=(p.posY-mid.posY)/pieces;
+				if(state==1){
+					state--;
+					moveUp();
+				}else{
+				setTimeout(moveUp,STEP_TIME);
+				}
+			}
+		}else{
+			finish();
+		}
+	}else{
+		setTimeout(showSplit,PAUSE_TIME,n);
+	}
+	
+	
+			function newRoot(){
+				if(state==0){
+					setTimeout(newRoot,PAUSE_TIME);
+				}else if(state==-1){
+					if(!areClose(mid,p)){
+						mid.posX+=dx;
+						mid.posY+=dy;
+						clean();
+						tree.draw();
+						setTimeout(newRoot,FRAME_TIME);
+					}else{
+						tree.saveP();
+						tree.arrange();
+						moveAll(n);
+					}
+				}else{
+					//state--;
+					tree.saveP();
+					tree.arrange();
+					moveAll(n);
+				}
+			}
+			
+			function moveUp(){
+				if(state==0){
+					setTimeout(moveUp,PAUSE_TIME);
+				}else if(state==-1){
+					if(!areClose(mid,p)){
+						mid.posX+=dx;
+						mid.posY+=dy;
+						clean();
+						tree.draw();
+						mid.draw();
+						setTimeout(moveUp,FRAME_TIME);
+					}else{
+						var f=false;
+						for(var i=0;i<p.keys.length;i++){
+							if(mid.keys[0] < p.keys[i]){
+								p.keys.splice(i,0,mid.keys[0]);
+								f=true;
+								break;
+							}
+						}
+						if(!f){
+							p.keys.push(mid.keys[0]);
+						}
+						
+						tree.saveP();
+						tree.arrange();
+						moveAll(n);
+					}
+				}else{
+					var f=false;
+						for(var i=0;i<p.keys.length;i++){
+							if(mid.keys[0] < p.keys[i]){
+								p.keys.splice(i,0,mid.keys[0]);
+								f=true;
+								break;
+							}
+						}
+						if(!f){
+							p.keys.push(mid.keys[0]);
+						}
+						
+						tree.saveP();
+						tree.arrange();
+						moveAll(n);
+				}
+			}
+}
+
+function finish(){ //вызывается при окончании анимации, включает/выключает нужные кнопки
+	//alert("ok");
+	//insert();
+	document.getElementById("insert").removeAttribute("disabled");
+	document.getElementById("new").removeAttribute("disabled");
+	 document.getElementById("start").setAttribute("disabled","disabled");
+	  document.getElementById("pause").setAttribute("disabled","disabled");
+	  document.getElementById("next").setAttribute("disabled","disabled");
+	  //document.getElementById("fin").setAttribute("disabled","disabled");
+}
+function areClose(n1,n2){ //проверяет находится ли один узел достаточно близко (незаметно для глаза) к другому при анимации 
+//p.s. если сравнивать через равенство узел почти всегда пролетает мимо своего места
+	eps=2;
+	var a = n1.posX;
+	var b= n1.posY;
+	var c;
+	var d;
+	if(n2){
+		c=n2.posX;
+		d=n2.posY;
+		
+	}else{
+		c=n1.oldPosX;
+		d=n1.oldPosY;
+	}
+	if(Math.abs(a-c)<eps&&Math.abs(b-d)<eps){
+			return true;
+		}else{
+			return false;
+		}
+}
+function changeSp(){ //ползунок изменения скорости , меняет частоту кадров
+	FRAME_TIME=35-document.getElementById("chSp").value;
+}
+function pause(){ //кнопка pause
+	state=0;
+	 document.getElementById("start").removeAttribute("disabled");
+	  document.getElementById("pause").setAttribute("disabled","disabled");
+	
+}
+function start(){ // кнопка start
+	state=-1; 
+	document.getElementById("start").setAttribute("disabled","disabled");
+	 document.getElementById("pause").removeAttribute("disabled");
+	  document.getElementById("next").removeAttribute("disabled");
+	 // document.getElementById("fin").removeAttribute("disabled");
+}
+function next(){//кнопка next step
+	state=1;
+	 //document.getElementById("next").setAttribute("disabled","disabled");
+	document.getElementById("start").removeAttribute("disabled");
+	 document.getElementById("pause").setAttribute("disabled","disabled");
+}
+function newTree(){ //кнопка new tree
+//создает новое дерево заданного размера из  случайных целых
+	state==0;
+	var a = document.getElementById("treeSize").value; 
+	var tr=new Tree(null);
+	for(var i=0;i<a;i++){
+	tr.insert(Math.floor(Math.random()*100));
+	}
+	tr.arrange(); //задаем координаты узлам в дереве
+	tr.draw(); //рисуем
+	tree=tr;
+	
+}
+function insert(){ //кнопка insert
+	var a=parseInt(document.getElementById("ins").value,10);
+	if(a==a){ //проверка на NaN
+		state=-1;
+		
+	document.getElementById("insert").setAttribute("disabled","disabled");
+	document.getElementById("new").setAttribute("disabled","disabled");
+	 document.getElementById("start").setAttribute("disabled","disabled");
+	  document.getElementById("pause").removeAttribute("disabled");
+	  document.getElementById("next").removeAttribute("disabled");
+	  //document.getElementById("fin").removeAttribute("disabled");
+
+		if(tree === null){ //если дерева нет то делаем новое из 1го узла
+			clean();
+			tree=new Tree(new Node([a]));
+			tree.arrange();
+			tree.draw();
+			finish();
+		}else{ //запускаем алгоритм поиска
+		showSerch(a);
+		}
+	}
+}
+</script>
+
+	<div id="container">
+	<div id="controls">
+	
+	<button onclick="insert()" id="insert">insert</button>
+	<input type="text" id="ins">
+	<div>
+	<button onclick="newTree()" id="new">new tree</button>
+	size: 
+	1<input type="range" min="1" max = "50" step="1"  id="treeSize">50 
+	</div>
+	<div>
+	<button onclick="start()" id="start">start</button>
+	<button onclick="pause()" id="pause">pause</button>
+	<button onclick="next()" id="next">next step</button>
+	speed: 
+	slow<input type="range" min="5" max = "30" step="1" value="15" oninput="changeSp()" id="chSp" title="скорость показа">fast
+	
+	</div>
+	</div>
+	<canvas height="400" width="1200" id="canva">
+	</canvas>
+</div>
+
+</body>
